@@ -1,32 +1,46 @@
 #!/bin/bash
 # Update and install Docker
-sudo yum update -y
-sudo amazon-linux-extras install docker -y
+yum update -y
+amazon-linux-extras install docker -y
 
 # Start Docker service
-sudo service docker start
+service docker start
 
-# Add ec2-user to Docker group and apply the new group settings
-sudo usermod -aG docker ec2-user
-newgrp docker
+# Add ec2-user to Docker group
+usermod -aG docker ec2-user
 
 # Enable Docker service to start on boot
-sudo systemctl enable docker
+systemctl enable docker
 
-# Pull the InfluxDB Docker image
-docker pull influxdb:latest
+# Install Docker Compose
+sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
-# Run the InfluxDB container
-docker run -d --name=influxdb -p 8086:8086 influxdb:latest
+# Install Git
+yum install -y git
 
-# Wait for InfluxDB to start and be ready
-sleep 20
+# Set up SSH for Git clone
+mkdir -p /home/ec2-user/.ssh
 
-# Set up InfluxDB organization, bucket, user, and password
-docker exec -i influxdb influx setup -u admin -p thanh@123 -o sample_org -b sample_bucket -r 0 -f
+# Create a new SSH key on the server
+su - ec2-user -c "ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_git -N ''"
 
+# Set up SSH configuration
+cat > /home/ec2-user/.ssh/config << 'EOF'
+Host github.com
+  IdentityFile ~/.ssh/id_rsa_git
+  StrictHostKeyChecking no
+EOF
 
-# Configure InfluxDB container to restart automatically
-docker update --restart unless-stopped influxdb
+chmod 600 /home/ec2-user/.ssh/config
+chown ec2-user:ec2-user /home/ec2-user/.ssh/config
 
-echo "InfluxDB setup complete."
+# Print the public key to add to GitHub repository
+echo "===== PUBLIC KEY (Add this key to GitHub deploy keys) ====="
+cat /home/ec2-user/.ssh/id_rsa_git.pub
+echo "===== END OF PUBLIC KEY ====="
+
+# Save the public key to a file for easy access later
+cat /home/ec2-user/.ssh/id_rsa_git.pub > /home/ec2-user/github_deploy_key.pub
+chmod 644 /home/ec2-user/github_deploy_key.pub
+chown ec2-user:ec2-user /home/ec2-user/github_deploy_key.pub
